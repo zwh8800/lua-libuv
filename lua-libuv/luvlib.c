@@ -25,6 +25,7 @@
 #include <fcntl.h>
 
 #define UV_SERVER_META "UV_SERVER_META"
+#define BACKLOG 512
 
 
 static int uv_test(lua_State *L) {
@@ -63,25 +64,82 @@ static void init()
 struct Server
 {
 	uv_tcp_t server;
+	lua_State *L;
 	struct sockaddr_in bind_addr;
+	lua_CFunction on_connection;
 };
 
-int init_server(struct Server* server)
+static int server_init(struct Server* server)
 {
 	int ret;
-	ret = uv_tcp_init(loop, &server->server);
+	ret = uv_tcp_init(loop, server);
 	if (ret < 0)
 		return ret;
+	return 0;
+}
 
+static void server_on_connection(uv_stream_t* uv_server, int status)
+{
+	int ret;
+	const char* err_str;
+	struct Server* server = uv_server;
+	lua_State *L = server->L;
+	if (server->on_connection == NULL)
+		return;
 
+	lua_pushcfunction(L, server->on_connection);
+
+	if (status < 0)
+	{
+		err_str = uv_strerror(status);
+		lua_pushnil(L);
+		lua_pushstring(L, err_str);
+
+		lua_call(L, 2, 0);
+
+		return;
+	}
+	lua_pushliteral(L, "ok");
+	lua_call(L, 1, 0);
+}
+
+static int server_bind(struct Server* server, const char* ip, int port, lua_CFunction on_connection)
+{
+	int ret;
+	server->on_connection = on_connection;
+	ret = uv_ip4_addr(ip, port, &server->bind_addr);
+	if (ret < 0)
+		return ret;
+	ret = uv_tcp_bind(server, &server->bind_addr, 0);
+	if (ret < 0)
+		return ret;
+	ret = uv_listen(server, BACKLOG, server_on_connection);
+	if (ret < 0)
+		return ret;
+	return 0;
+}
+
+static int uv_loop(lua_State *L)
+{
+	int ret;
+	const char* err_str;
+	ret = uv_run(loop, UV_RUN_DEFAULT);
+	if (ret < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
 }
 
 static int uv_createServer(lua_State *L) 
 {
 	int ret;
-	char* err_str;
+	const char* err_str;
 	struct Server* server = malloc(sizeof(struct Server));
-	if ((ret = init_server(server)) < 0)
+	memset(server, 0, sizeof(struct Server));
+	server->L = L;
+	if ((ret = server_init(server)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -96,14 +154,31 @@ static int uv_createServer(lua_State *L)
 
 static int s_listen(lua_State *L)
 {
+	int ret;
+	const char* err_str;
 	struct Server* server = lua_touserdata(L, 1);
-	printf("0x%p\n", server);
+	const char* ip = lua_tostring(L, 2);
+	lua_Integer port = lua_tointeger(L, 3);
+	lua_CFunction on_connection = lua_tocfunction(L, 4);
+	const char* name = lua_typename(L, lua_type(L, 4));
+	name = lua_typename(L, lua_type(L, 3));
+	name = lua_typename(L, lua_type(L, 2));
+	name = lua_typename(L, lua_type(L, 1));
+	if ((ret = server_bind(server, ip, port, on_connection)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
+	//printf("0x%p\n", server);
 
 	return 0;
 }
 
 static const luaL_Reg uvlib[] = {
 	{ "test", uv_test },
+	{ "loop", uv_loop },
 	{ "createServer", uv_createServer },
 	{ NULL, NULL }
 };
