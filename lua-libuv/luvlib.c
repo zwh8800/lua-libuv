@@ -66,7 +66,7 @@ struct Server
 	uv_tcp_t server;
 	lua_State *L;
 	struct sockaddr_in bind_addr;
-	lua_CFunction on_connection;
+	int on_connection;
 };
 
 static int server_init(struct Server* server)
@@ -84,10 +84,8 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 	const char* err_str;
 	struct Server* server = uv_server;
 	lua_State *L = server->L;
-	if (server->on_connection == NULL)
-		return;
 
-	lua_pushcfunction(L, server->on_connection);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, server->on_connection);
 
 	if (status < 0)
 	{
@@ -103,7 +101,7 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 	lua_call(L, 1, 0);
 }
 
-static int server_bind(struct Server* server, const char* ip, int port, lua_CFunction on_connection)
+static int server_bind(struct Server* server, const char* ip, int port, int on_connection)
 {
 	int ret;
 	server->on_connection = on_connection;
@@ -159,7 +157,7 @@ static int s_listen(lua_State *L)
 	struct Server* server = lua_touserdata(L, 1);
 	const char* ip = lua_tostring(L, 2);
 	lua_Integer port = lua_tointeger(L, 3);
-	lua_CFunction on_connection = lua_tocfunction(L, 4);
+	int on_connection = luaL_ref(L, LUA_REGISTRYINDEX);
 	const char* name = lua_typename(L, lua_type(L, 4));
 	name = lua_typename(L, lua_type(L, 3));
 	name = lua_typename(L, lua_type(L, 2));
