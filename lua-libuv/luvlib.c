@@ -25,6 +25,8 @@
 #include <fcntl.h>
 
 #define UV_SERVER_META "UV_SERVER_META"
+#define UV_SOCKET_META "UV_SOCKET_META"
+
 #define BACKLOG 512
 
 
@@ -59,6 +61,57 @@ static void init()
 		return;
 	loop = uv_loop_new();
 	inited = 1;
+}
+
+
+
+struct Socket
+{
+	uv_tcp_t socket;
+	lua_State *L;
+};
+
+struct Write
+{
+	uv_write_t write;
+	lua_State *L;
+	uv_buf_t buf;
+};
+
+static void socket_on_write(struct Write* write, int status)
+{
+	int ret;
+	const char* err_str;
+
+	if (status < 0)
+	{
+		err_str = uv_strerror(status);
+		goto error;
+	}
+
+error:
+	free(write);
+}
+
+static int socket_write(struct Socket* socket, const char* data)
+{
+	int ret;
+	lua_State *L = socket->L;
+	struct Write* write = malloc(sizeof(struct Write));
+	memset(write, 0, sizeof(struct Write));
+	write->L = L;
+	write->buf = uv_buf_init(data, strlen(data));
+	
+	ret = uv_write(write, socket, &write->buf, 1, socket_on_write);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static void socket_close(struct Socket* socket)
+{
+	uv_close(socket, NULL);
 }
 
 struct Server
@@ -97,7 +150,25 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 
 		return;
 	}
-	lua_pushliteral(L, "ok");
+	struct Socket* socket = malloc(sizeof(struct Socket));
+	memset(socket, 0, sizeof(struct Socket));
+	socket->L = L;
+
+	uv_tcp_init(loop, socket);
+	ret = uv_accept(server, socket);
+	if (ret < 0)
+	{
+		uv_close(socket, NULL);
+		err_str = uv_strerror(ret);
+		lua_pushnil(L);
+		lua_pushstring(L, err_str);
+
+		lua_call(L, 2, 0);
+		return;
+	}
+	lua_pushlightuserdata(L, socket);
+	luaL_setmetatable(L, UV_SOCKET_META);
+
 	lua_call(L, 1, 0);
 }
 
@@ -158,10 +229,6 @@ static int s_listen(lua_State *L)
 	const char* ip = lua_tostring(L, 2);
 	lua_Integer port = lua_tointeger(L, 3);
 	int on_connection = luaL_ref(L, LUA_REGISTRYINDEX);
-	const char* name = lua_typename(L, lua_type(L, 4));
-	name = lua_typename(L, lua_type(L, 3));
-	name = lua_typename(L, lua_type(L, 2));
-	name = lua_typename(L, lua_type(L, 1));
 	if ((ret = server_bind(server, ip, port, on_connection)) < 0)
 	{
 		err_str = uv_strerror(ret);
@@ -169,7 +236,45 @@ static int s_listen(lua_State *L)
 		lua_error(L);
 	}
 
-	//printf("0x%p\n", server);
+	return 0;
+}
+
+static int so_write(lua_State *L)
+{
+	int ret;
+	const char* err_str;
+	struct Socket* socket = lua_touserdata(L, 1);
+	const char* data = lua_tostring(L, 2);
+	if ((ret = socket_write(socket, data)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
+	return 0;
+}
+
+static int so_close(lua_State *L)
+{
+	struct Socket* socket = lua_touserdata(L, 1);
+	socket_close(socket);
+	return 0;
+}
+
+static int so_finish(lua_State *L)
+{
+	struct Socket* socket = lua_touserdata(L, 1);
+	const char* data = lua_tostring(L, 2);
+
+	lua_pushcfunction(L, so_write);
+	lua_pushlightuserdata(L, socket);
+	lua_pushstring(L, data);
+	lua_call(L, 2, 0);
+
+	lua_pushcfunction(L, so_close);
+	lua_pushlightuserdata(L, socket);
+	lua_call(L, 1, 0);
 
 	return 0;
 }
@@ -186,13 +291,26 @@ static const luaL_Reg serverlib[] = {
 	{ NULL, NULL }
 };
 
+static const luaL_Reg socketlib[] = {
+	{ "write", so_write },
+	{ "close", so_close },
+	{ "finish", so_finish },
+	{ NULL, NULL }
+};
+
 static void createmeta(lua_State *L)
 {
-	luaL_newmetatable(L, UV_SERVER_META);  /* create metatable for file handles */
-	lua_pushvalue(L, -1);  /* push metatable */
-	lua_setfield(L, -2, "__index");  /* metatable.__index = metatable */
-	luaL_setfuncs(L, serverlib, 0);  /* add file methods to new metatable */
-	lua_pop(L, 1);  /* pop new metatable */
+	luaL_newmetatable(L, UV_SERVER_META);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, -2, "__index");
+	luaL_setfuncs(L, serverlib, 0);
+	lua_pop(L, 1);
+
+	luaL_newmetatable(L, UV_SOCKET_META);
+	lua_pushvalue(L, -1);
+	lua_setfield(L, -2, "__index");
+	luaL_setfuncs(L, socketlib, 0);
+	lua_pop(L, 1);
 }
 
 LUAMOD_API int luaopen_uv(lua_State *L) {

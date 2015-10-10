@@ -12,11 +12,20 @@ function main()
 	
 	local server = uv.createServer()
 	print(server)
-	server:listen('0.0.0.0', 8080, function (client, err) 
-			if client then
-				uv.test(client)
+	local count = 1
+	server:listen('0.0.0.0', 8080, 
+		function (socket, err) 
+			if socket then
+				print(count .. ': ')
+				count = count + 1
+				print(socket)
+				socket:write('hello lua-uv\n')
+				-- socket:close()
+				
+				-- socket:finish('hello lua-uv\n')
+				
 			else
-				uv.test('got nil' .. err)
+				print('got nil' .. err)
 			end
 			
 		end
