@@ -1,6 +1,6 @@
 lua-libuv
 =====================
 
-使lua支持类似nodejs的异步编程，基于libuv实现
+浣縧ua鏀寔绫讳技nodejs鐨勫紓姝ョ紪绋嬶紝鍩轰簬libuv瀹炵幇
 
-目前在windows上开发和测试（Visual studio Community 2013），应该很方便能移植到Linux上，下一步会提供Linux上的Makefile
+鐩墠鍦╳indows涓婂紑鍙戝拰娴嬭瘯锛圴isual studio Community 2013锛夛紝搴旇寰堟柟渚胯兘绉绘鍒癓inux涓婏紝涓嬩竴姝ヤ細鎻愪緵Linux涓婄殑Makefile
