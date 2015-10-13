@@ -5,8 +5,7 @@ lua-libuv
 
 目前在windows上开发和测试（Visual studio Community 2013），应该很方便能移植到Linux上，下一步会提供Linux上的Makefile
 
--- 例子
-`
+### 例子
 	local server = uv.createServer()
 	print(server)
 	local count = 1
@@ -40,4 +39,3 @@ lua-libuv
 	)
 	
 	uv.loop()
-`
