@@ -20,8 +20,22 @@ function main()
 				count = count + 1
 				print(socket)
 				socket:write('hello lua-uv\n')
-				-- socket:close()
 				
+				socket:onData(
+					function(socket, nread, data)
+						if (nread >= 0) then
+							print('received: ' .. data)
+							if data == 'exit\n' then
+								socket:finish('bye')
+							end
+						else
+							print('error: ' .. socket .. ': ' .. data)
+						end
+						
+					end
+				)
+				
+				-- socket:close()
 				-- socket:finish('hello lua-uv\n')
 				
 			else

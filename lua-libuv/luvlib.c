@@ -69,6 +69,7 @@ struct Socket
 {
 	uv_tcp_t socket;
 	lua_State *L;
+	int on_data;
 };
 
 struct Write
@@ -78,10 +79,64 @@ struct Write
 	uv_buf_t buf;
 };
 
-static void socket_on_write(struct Write* write, int status)
+static void on_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t* buf)
+{
+	*buf = uv_buf_init(malloc(suggested_size), suggested_size);
+}
+
+static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t* buf)
 {
 	int ret;
 	const char* err_str;
+	struct Socket* socket = uv_socket;
+	lua_State *L = socket->L;
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
+	if (nread < 0)
+	{
+		err_str = uv_strerror(nread);
+		uv_close(socket, NULL);
+		lua_pushlightuserdata(L, socket);
+		lua_pushinteger(L, nread);
+		lua_pushstring(L, err_str);
+
+		lua_call(L, 3, 0);
+
+		free(socket);
+	}
+	char* str = malloc(nread + 1);
+	memcpy(str, buf->base, nread);
+	str[nread] = '\0';
+	lua_pushlightuserdata(L, socket);
+	lua_pushinteger(L, nread);
+	lua_pushstring(L, str);
+	lua_call(L, 3, 0);
+
+	free(str);
+}
+
+static int socket_reg_data(struct Socket* socket, int on_data)
+{
+	int ret;
+	lua_State *L = socket->L;
+	socket->on_data = on_data;
+
+	ret = uv_read_start(socket, on_alloc_buffer, on_stream_read);
+	if (ret < 0)
+	{
+		uv_close(socket, NULL);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void socket_on_write(uv_write_t* uv_write, int status)
+{
+	int ret;
+	const char* err_str;
+
+	struct Write* write = uv_write;
 
 	if (status < 0)
 	{
@@ -199,6 +254,7 @@ static int uv_loop(lua_State *L)
 		lua_pushstring(L, err_str);
 		lua_error(L);
 	}
+	return 0;
 }
 
 static int uv_createServer(lua_State *L) 
@@ -230,6 +286,22 @@ static int s_listen(lua_State *L)
 	lua_Integer port = lua_tointeger(L, 3);
 	int on_connection = luaL_ref(L, LUA_REGISTRYINDEX);
 	if ((ret = server_bind(server, ip, port, on_connection)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
+	return 0;
+}
+
+static int so_onData(lua_State* L)
+{
+	int ret;
+	const char* err_str;
+	struct Socket* socket = lua_touserdata(L, 1);
+	int on_data = luaL_ref(L, LUA_REGISTRYINDEX);
+	if ((ret = socket_reg_data(socket, on_data)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -292,6 +364,7 @@ static const luaL_Reg serverlib[] = {
 };
 
 static const luaL_Reg socketlib[] = {
+	{ "onData", so_onData },
 	{ "write", so_write },
 	{ "close", so_close },
 	{ "finish", so_finish },
