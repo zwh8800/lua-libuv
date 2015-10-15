@@ -24,8 +24,8 @@
 #include <uv.h>
 #include <fcntl.h>
 
-#define UV_SERVER_META "UV_SERVER_META"
-#define UV_SOCKET_META "UV_SOCKET_META"
+#define UV_SERVER_META "uv.Server"
+#define UV_SOCKET_META "uv.Socket"
 
 #define BACKLOG 512
 
@@ -282,10 +282,8 @@ static int s_listen(lua_State *L)
 	int ret;
 	const char* err_str;
 	struct Server* server = luaL_checkudata(L, 1, UV_SERVER_META);
-	luaL_argcheck(L, server != NULL, 1, "`Server' expected");
-
-	const char* ip = lua_tostring(L, 2);
-	lua_Integer port = lua_tointeger(L, 3);
+	const char* ip = luaL_checkstring(L, 2);
+	lua_Integer port = luaL_checkinteger(L, 3);
 	int on_connection = luaL_ref(L, LUA_REGISTRYINDEX);
 	if ((ret = server_bind(server, ip, port, on_connection)) < 0)
 	{
@@ -300,7 +298,6 @@ static int s_listen(lua_State *L)
 static int s_tostring(lua_State* L)
 {
 	struct Server* server = luaL_checkudata(L, 1, UV_SERVER_META);
-	luaL_argcheck(L, server != NULL, 1, "`Server' expected");
 
 	lua_pushfstring(L, "Server(0x%p)", server);
 	return 1;
@@ -311,8 +308,6 @@ static int so_onData(lua_State* L)
 	int ret;
 	const char* err_str;
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
-	luaL_argcheck(L, socket != NULL, 1, "`Socket' expected");
-
 	int on_data = luaL_ref(L, LUA_REGISTRYINDEX);
 	if ((ret = socket_reg_data(socket, on_data)) < 0)
 	{
@@ -329,9 +324,7 @@ static int so_write(lua_State *L)
 	int ret;
 	const char* err_str;
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
-	luaL_argcheck(L, socket != NULL, 1, "`Socket' expected");
-
-	const char* data = lua_tostring(L, 2);
+	const char* data = luaL_checkstring(L, 2);
 	if ((ret = socket_write(socket, data)) < 0)
 	{
 		err_str = uv_strerror(ret);
@@ -345,8 +338,6 @@ static int so_write(lua_State *L)
 static int so_close(lua_State *L)
 {
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
-	luaL_argcheck(L, socket != NULL, 1, "`Socket' expected");
-
 	socket_close(socket);
 	return 0;
 }
@@ -354,9 +345,7 @@ static int so_close(lua_State *L)
 static int so_finish(lua_State *L)
 {
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
-	luaL_argcheck(L, socket != NULL, 1, "`Socket' expected");
-
-	const char* data = lua_tostring(L, 2);
+	const char* data = luaL_checkstring(L, 2);
 
 	lua_pushcfunction(L, so_write);
 	lua_pushlightuserdata(L, socket);
@@ -373,8 +362,6 @@ static int so_finish(lua_State *L)
 static int so_tostring(lua_State* L)
 {
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
-	luaL_argcheck(L, socket != NULL, 1, "`Socket' expected");
-
 	lua_pushfstring(L, "Socket(0x%p)", socket);
 	return 1;
 }
