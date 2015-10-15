@@ -96,13 +96,14 @@ static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 	{
 		err_str = uv_strerror(nread);
 		uv_close(socket, NULL);
-		lua_pushlightuserdata(L, socket);
+		lua_pushnil(L);
 		lua_pushinteger(L, nread);
 		lua_pushstring(L, err_str);
 
 		lua_call(L, 3, 0);
 
 		free(socket);
+		goto error;
 	}
 	char* str = malloc(nread + 1);
 	memcpy(str, buf->base, nread);
@@ -113,6 +114,7 @@ static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 	lua_call(L, 3, 0);
 
 	free(str);
+error:
 	free(buf->base);
 }
 
