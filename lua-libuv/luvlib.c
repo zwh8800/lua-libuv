@@ -86,16 +86,15 @@ static void on_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t
 
 static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t* buf)
 {
-	int ret;
 	const char* err_str;
-	struct Socket* socket = uv_socket;
+	struct Socket* socket = (struct Socket*)uv_socket;
 	lua_State *L = socket->L;
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
 	if (nread < 0)
 	{
 		err_str = uv_strerror(nread);
-		uv_close(socket, NULL);
+		uv_close((uv_handle_t *)socket, NULL);
 		lua_pushlightuserdata(L, socket);
 		lua_pushinteger(L, nread);
 		lua_pushstring(L, err_str);
@@ -121,10 +120,10 @@ static int socket_reg_data(struct Socket* socket, int on_data)
 	lua_State *L = socket->L;
 	socket->on_data = on_data;
 
-	ret = uv_read_start(socket, on_alloc_buffer, on_stream_read);
+	ret = uv_read_start((uv_stream_t*)socket, on_alloc_buffer, on_stream_read);
 	if (ret < 0)
 	{
-		uv_close(socket, NULL);
+		uv_close((uv_handle_t *)socket, NULL);
 		return ret;
 	}
 
@@ -133,10 +132,9 @@ static int socket_reg_data(struct Socket* socket, int on_data)
 
 static void socket_on_write(uv_write_t* uv_write, int status)
 {
-	int ret;
 	const char* err_str;
 
-	struct Write* write = uv_write;
+	struct Write* write = (struct Write*)uv_write;
 
 	if (status < 0)
 	{
@@ -157,7 +155,7 @@ static int socket_write(struct Socket* socket, const char* data)
 	write->L = L;
 	write->buf = uv_buf_init(data, strlen(data));
 	
-	ret = uv_write(write, socket, &write->buf, 1, socket_on_write);
+	ret = uv_write((uv_write_t*)write, (uv_stream_t*)socket, &write->buf, 1, socket_on_write);
 	if (ret < 0)
 		return ret;
 
@@ -166,7 +164,7 @@ static int socket_write(struct Socket* socket, const char* data)
 
 static void socket_close(struct Socket* socket)
 {
-	uv_close(socket, NULL);
+	uv_close((uv_handle_t*)socket, NULL);
 }
 
 struct Server
@@ -180,7 +178,7 @@ struct Server
 static int server_init(struct Server* server)
 {
 	int ret;
-	ret = uv_tcp_init(loop, server);
+	ret = uv_tcp_init(loop, (uv_tcp_t*)server);
 	if (ret < 0)
 		return ret;
 	return 0;
@@ -190,7 +188,7 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 {
 	int ret;
 	const char* err_str;
-	struct Server* server = uv_server;
+	struct Server* server = (struct Server*)uv_server;
 	lua_State *L = server->L;
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, server->on_connection);
@@ -209,11 +207,11 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 	memset(socket, 0, sizeof(struct Socket));
 	socket->L = L;
 
-	uv_tcp_init(loop, socket);
-	ret = uv_accept(server, socket);
+	uv_tcp_init(loop, (uv_tcp_t*)socket);
+	ret = uv_accept((uv_stream_t*)server, (uv_stream_t*)socket);
 	if (ret < 0)
 	{
-		uv_close(socket, NULL);
+		uv_close((uv_handle_t*)socket, NULL);
 		err_str = uv_strerror(ret);
 		lua_pushnil(L);
 		lua_pushstring(L, err_str);
@@ -234,10 +232,10 @@ static int server_bind(struct Server* server, const char* ip, int port, int on_c
 	ret = uv_ip4_addr(ip, port, &server->bind_addr);
 	if (ret < 0)
 		return ret;
-	ret = uv_tcp_bind(server, &server->bind_addr, 0);
+	ret = uv_tcp_bind((uv_tcp_t*)server, &server->bind_addr, 0);
 	if (ret < 0)
 		return ret;
-	ret = uv_listen(server, BACKLOG, server_on_connection);
+	ret = uv_listen((uv_stream_t*)server, BACKLOG, server_on_connection);
 	if (ret < 0)
 		return ret;
 	return 0;
