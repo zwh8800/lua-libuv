@@ -1,15 +1,4 @@
 function main()
-	math.randomseed(os.time())
-	
-	for i = 1, 10 do 
-		local r = math.random()
-		if r % 2 == 0 then
-			uv.test(i .. ': ' .. r .. '(even)')
-		else
-			uv.test(i .. ': ' .. r .. '(odd)')
-		end
-	end
-	
 	local server = uv.createServer()
 	print(server)
 	local count = 1
@@ -22,16 +11,6 @@ function main()
 				
 				socket:onData(
 					function(socket, nread, data)
-						--[[
-						if (nread >= 0) then
-							print('received: ' .. data)
-							if data == 'exit\n' then
-								socket:finish('bye')
-							end
-						else
-							print('error: ' .. socket .. ': ' .. data)
-						end
-						]]
 						if (nread >= 0) then
 							print('received: ' .. data)
 							socket:write('HTTP/1.1 200 OK\r\n')
@@ -47,10 +26,6 @@ function main()
 						
 					end
 				)
-				
-				-- socket:close()
-				-- socket:finish('hello lua-uv\n')
-				
 			else
 				print('got nil' .. err)
 			end
@@ -61,5 +36,37 @@ function main()
 	uv.loop()
 	
 end
+
+function unittest1()
+	local server = uv.createServer()
+	server['listen']()
+	
+end
+function unittest2()
+	local server = uv.createServer()
+	server['listen'](server)
+	
+end
+function unittest3()
+	local server = uv.createServer()
+	server['listen'](server, '')
+	
+end
+function unittest4()
+	local server = uv.createServer()
+	server['listen'](server, '', 8080)
+	
+end
+function unittest5()
+	local server = uv.createServer()
+	server['listen'](server, '0.0.0.0', 8080)
+	
+end
+
+print(pcall(unittest1))
+print(pcall(unittest2))
+print(pcall(unittest3))
+print(pcall(unittest4))
+print(pcall(unittest5))
 
 main()

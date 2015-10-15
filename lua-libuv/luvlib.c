@@ -284,6 +284,7 @@ static int s_listen(lua_State *L)
 	struct Server* server = luaL_checkudata(L, 1, UV_SERVER_META);
 	const char* ip = luaL_checkstring(L, 2);
 	lua_Integer port = luaL_checkinteger(L, 3);
+	luaL_checkany(L, 4);
 	int on_connection = luaL_ref(L, LUA_REGISTRYINDEX);
 	if ((ret = server_bind(server, ip, port, on_connection)) < 0)
 	{
@@ -308,6 +309,7 @@ static int so_onData(lua_State* L)
 	int ret;
 	const char* err_str;
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
+	luaL_checkany(L, 2);
 	int on_data = luaL_ref(L, LUA_REGISTRYINDEX);
 	if ((ret = socket_reg_data(socket, on_data)) < 0)
 	{
