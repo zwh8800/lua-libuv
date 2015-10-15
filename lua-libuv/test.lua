@@ -19,10 +19,10 @@ function main()
 				print(count .. ': ')
 				count = count + 1
 				print(socket)
-				socket:write('hello lua-uv\n')
 				
 				socket:onData(
 					function(socket, nread, data)
+						--[[
 						if (nread >= 0) then
 							print('received: ' .. data)
 							if data == 'exit\n' then
@@ -31,6 +31,19 @@ function main()
 						else
 							print('error: ' .. socket .. ': ' .. data)
 						end
+						]]
+						if (nread >= 0) then
+							print('received: ' .. data)
+							socket:write('HTTP/1.1 200 OK\r\n')
+							socket:write('Content-Type: text/plain\r\n')
+							socket:write('\r\n')
+							socket:write('Hello')
+							socket:close()
+							
+						else
+							print('error: ' .. socket .. ': ' .. data)
+						end
+
 						
 					end
 				)
