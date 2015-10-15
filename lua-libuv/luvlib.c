@@ -113,6 +113,7 @@ static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 	lua_call(L, 3, 0);
 
 	free(str);
+	free(buf->base);
 }
 
 static int socket_reg_data(struct Socket* socket, int on_data)
@@ -304,6 +305,11 @@ static int s_tostring(lua_State* L)
 	return 1;
 }
 
+static int s_gc(lua_State* L)
+{
+	return 0;
+}
+
 static int so_onData(lua_State* L)
 {
 	int ret;
@@ -368,6 +374,11 @@ static int so_tostring(lua_State* L)
 	return 1;
 }
 
+static int so_gc(lua_State* L)
+{
+	return 0;
+}
+
 static const luaL_Reg uvlib[] = {
 	{ "test", uv_test },
 	{ "loop", uv_loop },
@@ -378,6 +389,7 @@ static const luaL_Reg uvlib[] = {
 static const luaL_Reg serverlib[] = {
 	{ "listen", s_listen },
 	{ "__tostring", s_tostring },
+	{ "__gc", s_gc },
 	{ NULL, NULL }
 };
 
@@ -387,6 +399,7 @@ static const luaL_Reg socketlib[] = {
 	{ "close", so_close },
 	{ "finish", so_finish },
 	{ "__tostring", so_tostring },
+	{ "__gc", so_gc },
 	{ NULL, NULL }
 };
 
