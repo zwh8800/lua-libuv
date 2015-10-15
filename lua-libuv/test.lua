@@ -10,20 +10,24 @@ function main()
 				print(socket)
 				
 				socket:onData(
-					function(socket, nread, data)
-						if (nread >= 0) then
-							print('received: ' .. data)
-							socket:write('HTTP/1.1 200 OK\r\n')
-							socket:write('Content-Type: text/plain\r\n')
-							socket:write('\r\n')
-							socket:write('Hello')
-							socket:close()
-							
-						else
-							print('error: ' .. socket .. ': ' .. data)
-						end
-
+					function(data)
+						print('received: ' .. data)
+						socket:write('HTTP/1.1 200 OK\r\n')
+						socket:write('Content-Type: text/plain\r\n')
+						socket:write('\r\n')
+						socket:write('Hello')
+						socket:close()
 						
+					end
+				)
+				socket:onEnd(
+					function()
+						print('remote closed')
+					end
+				)
+				socket:onError(
+					function(errCode, err)
+						print('error: ' .. errCode .. err)
 					end
 				)
 			else

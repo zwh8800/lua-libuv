@@ -70,6 +70,8 @@ struct Socket
 	uv_tcp_t socket;
 	lua_State *L;
 	int on_data;
+	int on_error;
+	int on_end;
 };
 
 struct Write
@@ -91,29 +93,34 @@ static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 	struct Socket* socket = uv_socket;
 	lua_State *L = socket->L;
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
-	if (nread < 0)
+	if (nread == UV__EOF)
 	{
-		err_str = uv_strerror(nread);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_end);
 		uv_close(socket, NULL);
-		lua_pushnil(L);
+
+		lua_call(L, 0, 0);
+	}
+	else if(nread < 0)
+	{
+		lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_error);
+		uv_close(socket, NULL);
+		err_str = uv_strerror(nread);
 		lua_pushinteger(L, nread);
 		lua_pushstring(L, err_str);
 
-		lua_call(L, 3, 0);
-
-		free(socket);
-		goto error;
+		lua_call(L, 2, 0);
 	}
-	char* str = malloc(nread + 1);
-	memcpy(str, buf->base, nread);
-	str[nread] = '\0';
-	lua_pushlightuserdata(L, socket);
-	lua_pushinteger(L, nread);
-	lua_pushstring(L, str);
-	lua_call(L, 3, 0);
+	else
+	{
+		lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
+		char* str = malloc(nread + 1);
+		memcpy(str, buf->base, nread);
+		str[nread] = '\0';
+		lua_pushstring(L, str);
+		lua_call(L, 1, 0);
 
-	free(str);
+		free(str);
+	}
 error:
 	free(buf->base);
 }
@@ -208,7 +215,7 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 
 		return;
 	}
-	struct Socket* socket = malloc(sizeof(struct Socket));
+	struct Socket* socket = lua_newuserdata(L, sizeof(struct Socket));
 	memset(socket, 0, sizeof(struct Socket));
 	socket->L = L;
 
@@ -218,13 +225,13 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 	{
 		uv_close(socket, NULL);
 		err_str = uv_strerror(ret);
+		lua_pop(L, 1);
 		lua_pushnil(L);
 		lua_pushstring(L, err_str);
 
 		lua_call(L, 2, 0);
 		return;
 	}
-	lua_pushlightuserdata(L, socket);
 	luaL_setmetatable(L, UV_SOCKET_META);
 
 	lua_call(L, 1, 0);
@@ -264,7 +271,7 @@ static int uv_createServer(lua_State *L)
 {
 	int ret;
 	const char* err_str;
-	struct Server* server = malloc(sizeof(struct Server));
+	struct Server* server = lua_newuserdata(L, sizeof(struct Server));
 	memset(server, 0, sizeof(struct Server));
 	server->L = L;
 	if ((ret = server_init(server)) < 0)
@@ -274,7 +281,6 @@ static int uv_createServer(lua_State *L)
 		lua_error(L);
 	}
 
-	lua_pushlightuserdata(L, server);
 	luaL_setmetatable(L, UV_SERVER_META);
 
 	return 1;
@@ -325,6 +331,30 @@ static int so_onData(lua_State* L)
 		lua_pushstring(L, err_str);
 		lua_error(L);
 	}
+
+	return 0;
+}
+
+static int so_onError(lua_State* L)
+{
+	int ret;
+	const char* err_str;
+	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
+	luaL_checkany(L, 2);
+	int on_error = luaL_ref(L, LUA_REGISTRYINDEX);
+	socket->on_error = on_error;
+
+	return 0;
+}
+
+static int so_onEnd(lua_State* L)
+{
+	int ret;
+	const char* err_str;
+	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
+	luaL_checkany(L, 2);
+	int on_end = luaL_ref(L, LUA_REGISTRYINDEX);
+	socket->on_end = on_end;
 
 	return 0;
 }
@@ -397,6 +427,8 @@ static const luaL_Reg serverlib[] = {
 
 static const luaL_Reg socketlib[] = {
 	{ "onData", so_onData },
+	{ "onError", so_onError },
+	{ "onEnd", so_onEnd },
 	{ "write", so_write },
 	{ "close", so_close },
 	{ "finish", so_finish },
