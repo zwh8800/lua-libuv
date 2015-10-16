@@ -432,20 +432,140 @@ static int uv_createConnection(lua_State* L)
 	return 1;
 }
 
-static int uv_lookup(lua_State* L)
+struct GetAddressInfo
 {
-	return 0;
+	uv_getaddrinfo_t getaddressinfo;
+	lua_State *L;
+	int on_getaddrinfo;
+};
+
+static void uv_on_resolve4(uv_getaddrinfo_t* uv_getaddressinfo, int status, struct addrinfo* res)
+{
+	int ret;
+	const char* err_str;
+	struct GetAddressInfo* getaddressinfo = uv_getaddressinfo;
+	lua_State* L = getaddressinfo->L;
+	lua_rawgeti(L, LUA_REGISTRYINDEX, getaddressinfo->on_getaddrinfo);
+	if (status < 0)
+	{
+		err_str = uv_strerror(status);
+		lua_pushnil(L);
+		lua_pushstring(L, err_str);
+
+		lua_call(L, 2, 0);
+		return;
+	}
+
+	lua_newtable(L);
+
+	int i = 1;
+	while (res)
+	{
+		char ip[INET_ADDRSTRLEN];
+
+		if ((ret = uv_ip4_name(res->ai_addr, ip, INET_ADDRSTRLEN)) < 0)
+		{
+			err_str = uv_strerror(ret);
+			lua_pop(L, 1);
+			lua_pushnil(L);
+			lua_pushstring(L, err_str);
+			
+			lua_call(L, 2, 0);
+			return;
+		}
+
+		lua_pushstring(L, ip);
+		lua_seti(L, -2, i);
+		res = res->ai_next;
+		i++;
+	}
+
+	lua_call(L, 1, 0);
+	luaL_unref(L, LUA_REGISTRYINDEX, getaddressinfo->on_getaddrinfo);
+	free(getaddressinfo);
 }
+
 static int uv_resolve4(lua_State* L)
 {
+	int ret;
+	const char* err_str;
+	const char* host = luaL_checkstring(L, 1);
+	int on_getaddrinfo = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	struct GetAddressInfo* getaddressinfo = malloc(sizeof(struct GetAddressInfo));
+	memset(getaddressinfo, 0, sizeof(struct GetAddressInfo));
+	getaddressinfo->L = L;
+	getaddressinfo->on_getaddrinfo = on_getaddrinfo;
+
+	if ((ret = uv_getaddrinfo(loop, getaddressinfo, uv_on_resolve4, host, NULL, NULL)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
 	return 0;
 }
-static int uv_resolve6(lua_State* L)
+
+static void uv_on_lookup(uv_getaddrinfo_t* uv_getaddressinfo, int status, struct addrinfo* res)
 {
-	return 0;
+	int ret;
+	const char* err_str;
+	struct GetAddressInfo* getaddressinfo = uv_getaddressinfo;
+	lua_State* L = getaddressinfo->L;
+	lua_rawgeti(L, LUA_REGISTRYINDEX, getaddressinfo->on_getaddrinfo);
+	if (status < 0)
+	{
+		err_str = uv_strerror(status);
+		lua_pushnil(L);
+		lua_pushstring(L, err_str);
+
+		lua_call(L, 2, 0);
+		return;
+	}
+
+	if (res)
+	{
+		char ip[INET_ADDRSTRLEN];
+
+		if ((ret = uv_ip4_name(res->ai_addr, ip, INET_ADDRSTRLEN)) < 0)
+		{
+			err_str = uv_strerror(ret);
+			lua_pop(L, 1);
+			lua_pushnil(L);
+			lua_pushstring(L, err_str);
+
+			lua_call(L, 2, 0);
+			return;
+		}
+
+		lua_pushstring(L, ip);
+	}
+
+	lua_call(L, 1, 0);
+	luaL_unref(L, LUA_REGISTRYINDEX, getaddressinfo->on_getaddrinfo);
+	free(getaddressinfo);
 }
-static int uv_reverse(lua_State* L)
+
+static int uv_lookup(lua_State* L)
 {
+	int ret;
+	const char* err_str;
+	const char* host = luaL_checkstring(L, 1);
+	int on_getaddrinfo = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	struct GetAddressInfo* getaddressinfo = malloc(sizeof(struct GetAddressInfo));
+	memset(getaddressinfo, 0, sizeof(struct GetAddressInfo));
+	getaddressinfo->L = L;
+	getaddressinfo->on_getaddrinfo = on_getaddrinfo;
+
+	if ((ret = uv_getaddrinfo(loop, getaddressinfo, uv_on_lookup, host, NULL, NULL)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
 	return 0;
 }
 
@@ -649,8 +769,6 @@ static const luaL_Reg uvlib[] = {
 	{ "createConnection", uv_createConnection },
 	{ "lookup", uv_lookup },
 	{ "resolve4", uv_resolve4 },
-	{ "resolve6", uv_resolve6 },
-	{ "reverse", uv_reverse },
 	{ NULL, NULL }
 };
 
