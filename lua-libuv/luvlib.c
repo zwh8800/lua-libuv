@@ -239,8 +239,6 @@ static int socket_reg_data(struct Socket* socket, int on_data)
 {
 	int ret;
 	lua_State *L = socket->L;
-	socket->on_data = on_data;
-	socket->has_on_data = 1;
 
 	ret = uv_read_start(socket, socket_on_alloc_buffer, socket_on_read);
 	if (ret < 0)
@@ -463,6 +461,9 @@ static int so_onData(lua_State* L)
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
 	luaL_checkany(L, 2);
 	int on_data = luaL_ref(L, LUA_REGISTRYINDEX);
+	socket->on_data = on_data;
+	socket->has_on_data = 1;
+
 	if ((ret = socket_reg_data(socket, on_data)) < 0)
 	{
 		err_str = uv_strerror(ret);

@@ -20,14 +20,14 @@ function main()
 					print('remote closed')
 				end
 			)
-			socket:onError(
-				function(errCode, err)
-					print('error: ' .. errCode .. err)
-				end
-			)
 		end
 	)
 	print(socket)
+	socket:onError(
+		function(errCode, err)
+			print('error: ' .. '[' .. errCode .. ']' .. err)
+		end
+	)
 	
 	uv.loop()
 end
