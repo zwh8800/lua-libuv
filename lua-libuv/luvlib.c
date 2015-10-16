@@ -69,8 +69,11 @@ struct Socket
 {
 	uv_tcp_t socket;
 	lua_State *L;
+	int has_on_data;
 	int on_data;
+	int has_on_error;
 	int on_error;
+	int has_on_end;
 	int on_end;
 };
 
@@ -80,6 +83,19 @@ struct Write
 	lua_State *L;
 	uv_buf_t buf;
 };
+
+static void socket_close(struct Socket* socket)
+{
+	lua_State* L = socket->L;
+	if (socket->has_on_data)
+		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_data);
+	if (socket->has_on_end)
+		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_end);
+	if (socket->has_on_error)
+		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_error);
+
+	uv_close(socket, NULL);
+}
 
 static void on_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t* buf)
 {
@@ -95,31 +111,42 @@ static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 
 	if (nread == UV__EOF)
 	{
-		lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_end);
-		uv_close(socket, NULL);
+		if (socket->has_on_end)
+		{
+			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_end);
 
-		lua_call(L, 0, 0);
+			lua_call(L, 0, 0);
+		}
+		//对端关闭后自动关闭socket
+		socket_close(socket);
 	}
 	else if(nread < 0)
 	{
-		lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_error);
-		uv_close(socket, NULL);
-		err_str = uv_strerror(nread);
-		lua_pushinteger(L, nread);
-		lua_pushstring(L, err_str);
+		if (socket->has_on_error)
+		{
+			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_error);
+			err_str = uv_strerror(nread);
+			lua_pushinteger(L, nread);
+			lua_pushstring(L, err_str);
 
-		lua_call(L, 2, 0);
+			lua_call(L, 2, 0);
+		}
+		//出错后自动关闭socket
+		socket_close(socket);
 	}
 	else
 	{
-		lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
-		char* str = malloc(nread + 1);
-		memcpy(str, buf->base, nread);
-		str[nread] = '\0';
-		lua_pushstring(L, str);
-		lua_call(L, 1, 0);
+		if (socket->has_on_data)
+		{
+			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
+			char* str = malloc(nread + 1);
+			memcpy(str, buf->base, nread);
+			str[nread] = '\0';
+			lua_pushstring(L, str);
+			lua_call(L, 1, 0);
 
-		free(str);
+			free(str);
+		}
 	}
 error:
 	free(buf->base);
@@ -130,11 +157,12 @@ static int socket_reg_data(struct Socket* socket, int on_data)
 	int ret;
 	lua_State *L = socket->L;
 	socket->on_data = on_data;
+	socket->has_on_data = 1;
 
 	ret = uv_read_start(socket, on_alloc_buffer, on_stream_read);
 	if (ret < 0)
 	{
-		uv_close(socket, NULL);
+		socket_close(socket);
 		return ret;
 	}
 
@@ -174,16 +202,12 @@ static int socket_write(struct Socket* socket, const char* data)
 	return 0;
 }
 
-static void socket_close(struct Socket* socket)
-{
-	uv_close(socket, NULL);
-}
-
 struct Server
 {
 	uv_tcp_t server;
 	lua_State *L;
 	struct sockaddr_in bind_addr;
+	int has_on_connection;
 	int on_connection;
 };
 
@@ -203,44 +227,49 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 	struct Server* server = uv_server;
 	lua_State *L = server->L;
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, server->on_connection);
-
-	if (status < 0)
+	if (server->has_on_connection)
 	{
-		err_str = uv_strerror(status);
-		lua_pushnil(L);
-		lua_pushstring(L, err_str);
 
-		lua_call(L, 2, 0);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, server->on_connection);
 
-		return;
+		if (status < 0)
+		{
+			err_str = uv_strerror(status);
+			lua_pushnil(L);
+			lua_pushstring(L, err_str);
+
+			lua_call(L, 2, 0);
+
+			return;
+		}
+		struct Socket* socket = lua_newuserdata(L, sizeof(struct Socket));
+		memset(socket, 0, sizeof(struct Socket));
+		socket->L = L;
+
+		uv_tcp_init(loop, socket);
+		ret = uv_accept(server, socket);
+		if (ret < 0)
+		{
+			socket_close(socket);
+			err_str = uv_strerror(ret);
+			lua_pop(L, 1);
+			lua_pushnil(L);
+			lua_pushstring(L, err_str);
+
+			lua_call(L, 2, 0);
+			return;
+		}
+		luaL_setmetatable(L, UV_SOCKET_META);
+
+		lua_call(L, 1, 0);
 	}
-	struct Socket* socket = lua_newuserdata(L, sizeof(struct Socket));
-	memset(socket, 0, sizeof(struct Socket));
-	socket->L = L;
-
-	uv_tcp_init(loop, socket);
-	ret = uv_accept(server, socket);
-	if (ret < 0)
-	{
-		uv_close(socket, NULL);
-		err_str = uv_strerror(ret);
-		lua_pop(L, 1);
-		lua_pushnil(L);
-		lua_pushstring(L, err_str);
-
-		lua_call(L, 2, 0);
-		return;
-	}
-	luaL_setmetatable(L, UV_SOCKET_META);
-
-	lua_call(L, 1, 0);
 }
 
 static int server_bind(struct Server* server, const char* ip, int port, int on_connection)
 {
 	int ret;
 	server->on_connection = on_connection;
+	server->has_on_connection = 1;
 	ret = uv_ip4_addr(ip, port, &server->bind_addr);
 	if (ret < 0)
 		return ret;
@@ -343,6 +372,7 @@ static int so_onError(lua_State* L)
 	luaL_checkany(L, 2);
 	int on_error = luaL_ref(L, LUA_REGISTRYINDEX);
 	socket->on_error = on_error;
+	socket->has_on_error = 1;
 
 	return 0;
 }
@@ -355,6 +385,7 @@ static int so_onEnd(lua_State* L)
 	luaL_checkany(L, 2);
 	int on_end = luaL_ref(L, LUA_REGISTRYINDEX);
 	socket->on_end = on_end;
+	socket->has_on_end = 1;
 
 	return 0;
 }
