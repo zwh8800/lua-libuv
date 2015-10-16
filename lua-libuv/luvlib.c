@@ -432,6 +432,23 @@ static int uv_createConnection(lua_State* L)
 	return 1;
 }
 
+static int uv_lookup(lua_State* L)
+{
+	return 0;
+}
+static int uv_resolve4(lua_State* L)
+{
+	return 0;
+}
+static int uv_resolve6(lua_State* L)
+{
+	return 0;
+}
+static int uv_reverse(lua_State* L)
+{
+	return 0;
+}
+
 static int s_listen(lua_State *L)
 {
 	int ret;
@@ -630,6 +647,10 @@ static const luaL_Reg uvlib[] = {
 	{ "loop", uv_loop },
 	{ "createServer", uv_createServer },
 	{ "createConnection", uv_createConnection },
+	{ "lookup", uv_lookup },
+	{ "resolve4", uv_resolve4 },
+	{ "resolve6", uv_resolve6 },
+	{ "reverse", uv_reverse },
 	{ NULL, NULL }
 };
 
