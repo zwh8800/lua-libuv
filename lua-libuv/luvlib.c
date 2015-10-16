@@ -69,12 +69,15 @@ struct Socket
 {
 	uv_tcp_t socket;
 	lua_State *L;
+	struct sockaddr_in conn_addr;
 	int has_on_data;
 	int on_data;
 	int has_on_error;
 	int on_error;
 	int has_on_end;
 	int on_end;
+	int has_on_connect;
+	int on_connect;
 };
 
 struct Write
@@ -82,6 +85,13 @@ struct Write
 	uv_write_t write;
 	lua_State *L;
 	uv_buf_t buf;
+};
+
+struct Connect
+{
+	uv_connect_t connect;
+	lua_State *L;
+	struct Socket* socket;
 };
 
 static void socket_close(struct Socket* socket)
@@ -93,16 +103,89 @@ static void socket_close(struct Socket* socket)
 		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_end);
 	if (socket->has_on_error)
 		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_error);
+	if (socket->has_on_connect)
+		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_connect);
 
 	uv_close(socket, NULL);
 }
 
-static void on_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t* buf)
+static int socket_init(struct Socket* socket)
+{
+	int ret;
+	ret = uv_tcp_init(loop, socket);
+	if (ret < 0)
+		return ret;
+	return 0;
+}
+
+static void socket_on_connect(uv_connect_t* uv_connect, int status)
+{
+	int ret;
+	const char* err_str;
+	struct Connect* connect = uv_connect;
+	struct Socket* socket = connect->socket;
+	lua_State *L = socket->L;
+
+	if (status < 0)
+	{
+		if (socket->has_on_error)
+		{
+			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_error);
+			err_str = uv_strerror(status);
+			lua_pushinteger(L, status);
+			lua_pushstring(L, err_str);
+
+			lua_call(L, 2, 0);
+		}
+		//出错后自动关闭socket
+		socket_close(socket);
+	}
+	else
+	{
+
+		if (socket->has_on_connect)
+		{
+			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_connect);
+
+			lua_call(L, 0, 0);
+		}
+	}
+
+	free(connect);
+}
+
+static int socket_connect(struct Socket* socket, const char* ip, int port, int on_connect)
+{
+	int ret;
+	lua_State *L = socket->L;
+	socket->on_connect = on_connect;
+	socket->has_on_connect = 1;
+
+	ret = uv_ip4_addr(ip, port, &socket->conn_addr);
+	if (ret < 0)
+		return ret;
+
+	struct Connect* connect = malloc(sizeof(struct Connect));
+	memset(connect, 0, sizeof(struct Connect));
+	connect->L = L;
+	connect->socket = socket;
+
+	ret = uv_tcp_connect(connect, socket, &socket->conn_addr, socket_on_connect);
+	if (ret < 0)
+	{
+		free(connect);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void socket_on_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t* buf)
 {
 	*buf = uv_buf_init(malloc(suggested_size), suggested_size);
 }
 
-static void on_stream_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t* buf)
+static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t* buf)
 {
 	int ret;
 	const char* err_str;
@@ -159,7 +242,7 @@ static int socket_reg_data(struct Socket* socket, int on_data)
 	socket->on_data = on_data;
 	socket->has_on_data = 1;
 
-	ret = uv_read_start(socket, on_alloc_buffer, on_stream_read);
+	ret = uv_read_start(socket, socket_on_alloc_buffer, socket_on_read);
 	if (ret < 0)
 	{
 		socket_close(socket);
@@ -246,7 +329,7 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 		memset(socket, 0, sizeof(struct Socket));
 		socket->L = L;
 
-		uv_tcp_init(loop, socket);
+		socket_init(socket);
 		ret = uv_accept(server, socket);
 		if (ret < 0)
 		{
@@ -311,6 +394,32 @@ static int uv_createServer(lua_State *L)
 	}
 
 	luaL_setmetatable(L, UV_SERVER_META);
+
+	return 1;
+}
+
+static int uv_createConnection(lua_State* L)
+{
+	int ret;
+	const char* err_str;
+
+	const char* ip = luaL_checkstring(L, 1);
+	lua_Integer port = luaL_checkinteger(L, 2);
+	luaL_checkany(L, 3);
+	int on_connect = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	struct Socket* socket = lua_newuserdata(L, sizeof(struct Socket));
+	memset(socket, 0, sizeof(struct Socket));
+	socket->L = L;
+	socket_init(socket);
+	if ((ret = socket_connect(socket, ip, port, on_connect)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
+	luaL_setmetatable(L, UV_SOCKET_META);
 
 	return 1;
 }
@@ -446,6 +555,7 @@ static const luaL_Reg uvlib[] = {
 	{ "test", uv_test },
 	{ "loop", uv_loop },
 	{ "createServer", uv_createServer },
+	{ "createConnection", uv_createConnection },
 	{ NULL, NULL }
 };
 
