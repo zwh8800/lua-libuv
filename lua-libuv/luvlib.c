@@ -202,7 +202,7 @@ static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 	struct Socket* socket = uv_socket;
 	lua_State *L = socket->L;
 
-	if (nread == UV__EOF)
+	if (nread == UV_EOF)
 	{
 		if (socket->has_on_end)
 		{
