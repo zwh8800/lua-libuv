@@ -29,6 +29,12 @@
 
 #define BACKLOG 512
 
+#ifdef WIN32
+#define htons(x) (uint16_t)(((uint16_t)x << 8) | ((uint16_t)x >> 8))
+#define ntohs(x) (uint16_t)(((uint16_t)x << 8) | ((uint16_t)x >> 8))
+
+#endif
+
 
 static int uv_test(lua_State *L) {
 	int n = lua_gettop(L);  /* number of arguments */
@@ -78,6 +84,7 @@ struct Socket
 	int on_end;
 	int has_on_connect;
 	int on_connect;
+	int closed;
 };
 
 struct Write
@@ -96,17 +103,21 @@ struct Connect
 
 static void socket_close(struct Socket* socket)
 {
-	lua_State* L = socket->L;
-	if (socket->has_on_data)
-		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_data);
-	if (socket->has_on_end)
-		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_end);
-	if (socket->has_on_error)
-		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_error);
-	if (socket->has_on_connect)
-		luaL_unref(L, LUA_REGISTRYINDEX, socket->on_connect);
+	if (!socket->closed)
+	{
+		lua_State* L = socket->L;
+		if (socket->has_on_data)
+			luaL_unref(L, LUA_REGISTRYINDEX, socket->on_data);
+		if (socket->has_on_end)
+			luaL_unref(L, LUA_REGISTRYINDEX, socket->on_end);
+		if (socket->has_on_error)
+			luaL_unref(L, LUA_REGISTRYINDEX, socket->on_error);
+		if (socket->has_on_connect)
+			luaL_unref(L, LUA_REGISTRYINDEX, socket->on_connect);
 
-	uv_close(socket, NULL);
+		uv_close(socket, NULL);
+		socket->closed = 1;
+	}
 }
 
 static int socket_init(struct Socket* socket)
@@ -142,7 +153,6 @@ static void socket_on_connect(uv_connect_t* uv_connect, int status)
 	}
 	else
 	{
-
 		if (socket->has_on_connect)
 		{
 			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_connect);
@@ -540,6 +550,66 @@ static int so_finish(lua_State *L)
 	return 0;
 }
 
+static int so_getsockname(lua_State* L)
+{
+	int ret;
+	const char* err_str;
+
+	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
+	struct sockaddr_in sockaddr;
+	int len = sizeof(struct sockaddr_in);
+	
+	if ((ret = uv_tcp_getsockname(socket, &sockaddr, &len)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+	char ip[INET_ADDRSTRLEN];
+	
+	if ((ret = uv_ip4_name(&sockaddr, ip, INET_ADDRSTRLEN)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
+	lua_pushstring(L, ip);
+	lua_pushinteger(L, ntohs(sockaddr.sin_port));
+
+	return 2;
+}
+
+static int so_getpeername(lua_State* L)
+{
+	int ret;
+	const char* err_str;
+
+	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
+	struct sockaddr_in sockaddr;
+	int len = sizeof(struct sockaddr_in);
+
+	if ((ret = uv_tcp_getpeername(socket, &sockaddr, &len)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+	char ip[INET_ADDRSTRLEN];
+
+	if ((ret = uv_ip4_name(&sockaddr, ip, INET_ADDRSTRLEN)) < 0)
+	{
+		err_str = uv_strerror(ret);
+		lua_pushstring(L, err_str);
+		lua_error(L);
+	}
+
+	lua_pushstring(L, ip);
+	lua_pushinteger(L, ntohs(sockaddr.sin_port));
+
+	return 2;
+}
+
 static int so_tostring(lua_State* L)
 {
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
@@ -549,6 +619,9 @@ static int so_tostring(lua_State* L)
 
 static int so_gc(lua_State* L)
 {
+	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
+	socket_close(socket);
+
 	return 0;
 }
 
@@ -574,6 +647,8 @@ static const luaL_Reg socketlib[] = {
 	{ "write", so_write },
 	{ "close", so_close },
 	{ "finish", so_finish },
+	{ "getsockname", so_getsockname },
+	{ "getpeername", so_getpeername },
 	{ "__tostring", so_tostring },
 	{ "__gc", so_gc },
 	{ NULL, NULL }
@@ -595,9 +670,9 @@ static void createmeta(lua_State *L)
 }
 
 LUAMOD_API int luaopen_uv(lua_State *L) {
+	init();
 	luaL_newlib(L, uvlib);
 	createmeta(L);
-	init();
 	return 1;
 }
 

@@ -8,6 +8,8 @@ function main()
 				print(count .. ': ')
 				count = count + 1
 				print(socket)
+				print('host socket ip&port: ', socket:getsockname())
+				print('remote socket ip&port: ', socket:getpeername())
 				
 				socket:onData(
 					function(data)
