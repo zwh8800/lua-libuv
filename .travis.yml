@@ -25,10 +25,11 @@ before_script:
     # back to home directory
     - cd $TRAVIS_BUILD_DIR/lua-libuv
     # check executables
-    - which $LUA_BIN 2>/dev/null && $LUA_BIN -v
+    - which $LUA_BIN 2>/dev/null
+    - ./$LUA_BIN -v
 script:
     - cd $TRAVIS_BUILD_DIR/lua-libuv
-    - $LUA_BIN ../test/test.lua
+    - ./$LUA_BIN ../test/test.lua
 notifications:
     email:
         on_success: change
