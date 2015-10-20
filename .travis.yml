@@ -16,6 +16,7 @@ install:
     - cd $DEPS_BUILD_DIR
     - git clone $UV_REPO libuv.git
     - cd libuv.git && sh autogen.sh && ./configure && make && sudo make install;
+    - sudo ldconfig
 
     # build lib
     - cd $TRAVIS_BUILD_DIR
