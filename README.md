@@ -1,5 +1,6 @@
 lua-libuv
 =====================
+[![Build Status](https://travis-ci.org/zwh8800/lua-libuv.png?branch=master)](https://travis-ci.org/zwh8800/lua-libuv)
 
 使lua支持类似nodejs的异步编程，基于lua5.3.1和libuv
 
