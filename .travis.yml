@@ -15,11 +15,11 @@ install:
     # install libuv
     - cd $DEPS_BUILD_DIR
     - git clone $UV_REPO libuv.git && cd libuv.git && sudo make install;
-	
+
     # build lib
     - cd $TRAVIS_BUILD_DIR
     - make linux
-	
+
 before_script:
     # back to home directory
     - cd $TRAVIS_BUILD_DIR/lua-libuv
