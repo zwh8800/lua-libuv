@@ -39,7 +39,7 @@ function main()
 		end
 	)
 	
-	-- uv.loop()
+	uv.loop()
 	
 end
 

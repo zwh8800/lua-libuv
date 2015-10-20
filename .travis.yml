@@ -1,0 +1,34 @@
+# ref: http://docs.travis-ci.com/user/build-configuration
+
+language: erlang
+
+env:
+    global:
+        - DEPS_BUILD_DIR=$TRAVIS_BUILD_DIR/deps
+        - UV_REPO="https://github.com/libuv/libuv.git"
+        - LUA_BIN="lua"
+
+before_install:
+    - mkdir -p $DEPS_BUILD_DIR
+
+install:
+    # install libuv
+    - cd $DEPS_BUILD_DIR
+    - git clone $UV_REPO libuv.git && cd libuv.git && sudo make install;
+	
+    # build lib
+    - cd $TRAVIS_BUILD_DIR
+    - make linux
+	
+before_script:
+    # back to home directory
+    - cd $TRAVIS_BUILD_DIR/lua-libuv
+    # check executables
+    - which $LUA_BIN 2>/dev/null && $LUA_BIN -v
+script:
+    - cd $TRAVIS_BUILD_DIR/lua-libuv
+    - $LUA_BIN ../test/test.lua
+notifications:
+    email:
+        on_success: change
+        on_failure: always
