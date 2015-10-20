@@ -4,7 +4,7 @@ lua-libuv
 
 使lua支持类似nodejs的异步编程，基于lua5.3.1和libuv
 
-目前在windows上开发和测试（Visual studio Community 2013），应该很方便能移植到Linux上，下一步会提供Linux上的Makefile
+目前在windows上开发和测试（Visual studio Community 2013），应该很方便能移植到Linux上，下一步会提供Linux上的Makefile（已支持Linux）
 
 ### 例子
 	local server = uv.createServer()
@@ -16,22 +16,30 @@ lua-libuv
 				print(count .. ': ')
 				count = count + 1
 				print(socket)
-				socket:write('hello lua-uv\n')
+				print('host socket ip&port: ', socket:getsockname())
+				print('remote socket ip&port: ', socket:getpeername())
 				
 				socket:onData(
-					function(socket, nread, data)
-						if (nread >= 0) then
-							print('received: ' .. data)
-							if data == 'exit\n' then
-								socket:finish('bye')
-							end
-						else
-							print('error: ' .. socket .. ': ' .. data)
-						end
+					function(data)
+						print('received: ' .. data)
+						socket:write('HTTP/1.1 200 OK\r\n')
+						socket:write('Content-Type: text/plain\r\n')
+						socket:write('\r\n')
+						socket:write('Hello')
+						socket:close()
 						
 					end
 				)
-
+				socket:onEnd(
+					function()
+						print('remote closed')
+					end
+				)
+				socket:onError(
+					function(errCode, err)
+						print('error: ' .. errCode .. err)
+					end
+				)
 			else
 				print('got nil' .. err)
 			end
