@@ -25,7 +25,6 @@ install:
 before_script:
     # back to home directory
     - cd $TRAVIS_BUILD_DIR/lua-libuv
-    - ls
     # check executables
     - ./$LUA_BIN -v
 script:
