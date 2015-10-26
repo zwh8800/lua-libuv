@@ -38,9 +38,6 @@ function main()
             
         end
     )
-    
-    -- uv.loop()
-    
 end
 
 function unittest1()
