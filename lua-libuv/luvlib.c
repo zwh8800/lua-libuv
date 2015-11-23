@@ -148,7 +148,7 @@ static void socket_on_connect(uv_connect_t* uv_connect, int status)
 
 			lua_call(L, 2, 0);
 		}
-		//出错后自动关闭socket
+		//鍑洪敊鍚庤嚜鍔ㄥ叧闂璼ocket
 		socket_close(socket);
 	}
 	else
@@ -210,7 +210,7 @@ static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 
 			lua_call(L, 0, 0);
 		}
-		//对端关闭后自动关闭socket
+		//瀵圭鍏抽棴鍚庤嚜鍔ㄥ叧闂璼ocket
 		socket_close(socket);
 	}
 	else if(nread < 0)
@@ -224,7 +224,7 @@ static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 
 			lua_call(L, 2, 0);
 		}
-		//出错后自动关闭socket
+		//鍑洪敊鍚庤嚜鍔ㄥ叧闂璼ocket
 		socket_close(socket);
 	}
 	else
