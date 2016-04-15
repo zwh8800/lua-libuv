@@ -1,0 +1,70 @@
+cmake_minimum_required(VERSION 3.3)
+project(lua_libuv)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
+set(SOURCE_FILES
+    lua-libuv/lapi.c
+    lua-libuv/lapi.h
+    lua-libuv/lauxlib.c
+    lua-libuv/lauxlib.h
+    lua-libuv/lbaselib.c
+    lua-libuv/lbitlib.c
+    lua-libuv/lcode.c
+    lua-libuv/lcode.h
+    lua-libuv/lcorolib.c
+    lua-libuv/lctype.c
+    lua-libuv/lctype.h
+    lua-libuv/ldblib.c
+    lua-libuv/ldebug.c
+    lua-libuv/ldebug.h
+    lua-libuv/ldo.c
+    lua-libuv/ldo.h
+    lua-libuv/ldump.c
+    lua-libuv/lfunc.c
+    lua-libuv/lfunc.h
+    lua-libuv/lgc.c
+    lua-libuv/lgc.h
+    lua-libuv/linit.c
+    lua-libuv/liolib.c
+    lua-libuv/llex.c
+    lua-libuv/llex.h
+    lua-libuv/llimits.h
+    lua-libuv/lmathlib.c
+    lua-libuv/lmem.c
+    lua-libuv/lmem.h
+    lua-libuv/loadlib.c
+    lua-libuv/lobject.c
+    lua-libuv/lobject.h
+    lua-libuv/lopcodes.c
+    lua-libuv/lopcodes.h
+    lua-libuv/loslib.c
+    lua-libuv/lparser.c
+    lua-libuv/lparser.h
+    lua-libuv/lprefix.h
+    lua-libuv/lstate.c
+    lua-libuv/lstate.h
+    lua-libuv/lstring.c
+    lua-libuv/lstring.h
+    lua-libuv/lstrlib.c
+    lua-libuv/ltable.c
+    lua-libuv/ltable.h
+    lua-libuv/ltablib.c
+    lua-libuv/ltm.c
+    lua-libuv/ltm.h
+    lua-libuv/lua.c
+    lua-libuv/lua.h
+    lua-libuv/lua.hpp
+    lua-libuv/luac.c
+    lua-libuv/luaconf.h
+    lua-libuv/lualib.h
+    lua-libuv/lundump.c
+    lua-libuv/lundump.h
+    lua-libuv/lutf8lib.c
+    lua-libuv/luvlib.c
+    lua-libuv/lvm.c
+    lua-libuv/lvm.h
+    lua-libuv/lzio.c
+    lua-libuv/lzio.h)
+
+add_executable(lua_libuv ${SOURCE_FILES})

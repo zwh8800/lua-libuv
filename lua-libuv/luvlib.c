@@ -115,7 +115,7 @@ static void socket_close(struct Socket* socket)
 		if (socket->has_on_connect)
 			luaL_unref(L, LUA_REGISTRYINDEX, socket->on_connect);
 
-		uv_close(socket, NULL);
+		uv_close((uv_handle_t*)socket, NULL);
 		socket->closed = 1;
 	}
 }
@@ -123,7 +123,7 @@ static void socket_close(struct Socket* socket)
 static int socket_init(struct Socket* socket)
 {
 	int ret;
-	ret = uv_tcp_init(loop, socket);
+	ret = uv_tcp_init(loop, (uv_tcp_t*)socket);
 	if (ret < 0)
 		return ret;
 	return 0;
@@ -133,7 +133,7 @@ static void socket_on_connect(uv_connect_t* uv_connect, int status)
 {
 	int ret;
 	const char* err_str;
-	struct Connect* connect = uv_connect;
+	struct Connect* connect = (struct Connect*)uv_connect;
 	struct Socket* socket = connect->socket;
 	lua_State *L = socket->L;
 
@@ -180,7 +180,7 @@ static int socket_connect(struct Socket* socket, const char* ip, int port, int o
 	connect->L = L;
 	connect->socket = socket;
 
-	ret = uv_tcp_connect(connect, socket, &socket->conn_addr, socket_on_connect);
+	ret = uv_tcp_connect((uv_connect_t*)connect, (uv_tcp_t*)socket, (const struct sockaddr*)&socket->conn_addr, socket_on_connect);
 	if (ret < 0)
 	{
 		free(connect);
@@ -192,14 +192,14 @@ static int socket_connect(struct Socket* socket, const char* ip, int port, int o
 
 static void socket_on_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t* buf)
 {
-	*buf = uv_buf_init(malloc(suggested_size), suggested_size);
+	*buf = uv_buf_init(malloc(suggested_size), (unsigned)suggested_size);
 }
 
 static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t* buf)
 {
 	int ret;
 	const char* err_str;
-	struct Socket* socket = uv_socket;
+	struct Socket* socket = (struct Socket*)uv_socket;
 	lua_State *L = socket->L;
 
 	if (nread == UV_EOF)
@@ -218,7 +218,7 @@ static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 		if (socket->has_on_error)
 		{
 			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_error);
-			err_str = uv_strerror(nread);
+			err_str = uv_strerror((int)nread);
 			lua_pushinteger(L, nread);
 			lua_pushstring(L, err_str);
 
@@ -232,7 +232,7 @@ static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 		if (socket->has_on_data)
 		{
 			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
-			char* str = malloc(nread + 1);
+			char* str = malloc((size_t)nread + 1);
 			memcpy(str, buf->base, nread);
 			str[nread] = '\0';
 			lua_pushstring(L, str);
@@ -250,7 +250,7 @@ static int socket_reg_data(struct Socket* socket, int on_data)
 	int ret;
 	lua_State *L = socket->L;
 
-	ret = uv_read_start(socket, socket_on_alloc_buffer, socket_on_read);
+	ret = uv_read_start((uv_stream_t*)socket, socket_on_alloc_buffer, socket_on_read);
 	if (ret < 0)
 	{
 		socket_close(socket);
@@ -265,7 +265,7 @@ static void socket_on_write(uv_write_t* uv_write, int status)
 	int ret;
 	const char* err_str;
 
-	struct Write* write = uv_write;
+	struct Write* write = (struct Write*)uv_write;
 
 	if (status < 0)
 	{
@@ -284,9 +284,9 @@ static int socket_write(struct Socket* socket, const char* data)
 	struct Write* write = malloc(sizeof(struct Write));
 	memset(write, 0, sizeof(struct Write));
 	write->L = L;
-	write->buf = uv_buf_init(data, strlen(data));
+	write->buf = uv_buf_init((char*)data, (unsigned)strlen(data));
 	
-	ret = uv_write(write, socket, &write->buf, 1, socket_on_write);
+	ret = uv_write((uv_write_t*)write, (uv_stream_t*)socket, &write->buf, 1, socket_on_write);
 	if (ret < 0)
 		return ret;
 
@@ -305,7 +305,7 @@ struct Server
 static int server_init(struct Server* server)
 {
 	int ret;
-	ret = uv_tcp_init(loop, server);
+	ret = uv_tcp_init(loop, (uv_tcp_t*)server);
 	if (ret < 0)
 		return ret;
 	return 0;
@@ -315,7 +315,7 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 {
 	int ret;
 	const char* err_str;
-	struct Server* server = uv_server;
+	struct Server* server = (struct Server*)uv_server;
 	lua_State *L = server->L;
 
 	if (server->has_on_connection)
@@ -338,7 +338,7 @@ static void server_on_connection(uv_stream_t* uv_server, int status)
 		socket->L = L;
 
 		socket_init(socket);
-		ret = uv_accept(server, socket);
+		ret = uv_accept((uv_stream_t*)server, (uv_stream_t*)socket);
 		if (ret < 0)
 		{
 			socket_close(socket);
@@ -364,10 +364,10 @@ static int server_bind(struct Server* server, const char* ip, int port, int on_c
 	ret = uv_ip4_addr(ip, port, &server->bind_addr);
 	if (ret < 0)
 		return ret;
-	ret = uv_tcp_bind(server, &server->bind_addr, 0);
+	ret = uv_tcp_bind((uv_tcp_t*)server, (const struct sockaddr*)&server->bind_addr, 0);
 	if (ret < 0)
 		return ret;
-	ret = uv_listen(server, BACKLOG, server_on_connection);
+	ret = uv_listen((uv_stream_t*)server, BACKLOG, server_on_connection);
 	if (ret < 0)
 		return ret;
 	return 0;
@@ -420,7 +420,7 @@ static int uv_createConnection(lua_State* L)
 	memset(socket, 0, sizeof(struct Socket));
 	socket->L = L;
 	socket_init(socket);
-	if ((ret = socket_connect(socket, ip, port, on_connect)) < 0)
+	if ((ret = socket_connect(socket, ip, (int)port, on_connect)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -443,7 +443,7 @@ static void uv_on_resolve4(uv_getaddrinfo_t* uv_getaddressinfo, int status, stru
 {
 	int ret;
 	const char* err_str;
-	struct GetAddressInfo* getaddressinfo = uv_getaddressinfo;
+	struct GetAddressInfo* getaddressinfo = (struct GetAddressInfo*)uv_getaddressinfo;
 	lua_State* L = getaddressinfo->L;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, getaddressinfo->on_getaddrinfo);
 	if (status < 0)
@@ -463,7 +463,7 @@ static void uv_on_resolve4(uv_getaddrinfo_t* uv_getaddressinfo, int status, stru
 	{
 		char ip[INET_ADDRSTRLEN];
 
-		if ((ret = uv_ip4_name(res->ai_addr, ip, INET_ADDRSTRLEN)) < 0)
+		if ((ret = uv_ip4_name((const struct sockaddr_in*)res->ai_addr, ip, INET_ADDRSTRLEN)) < 0)
 		{
 			err_str = uv_strerror(ret);
 			lua_pop(L, 1);
@@ -497,7 +497,7 @@ static int uv_resolve4(lua_State* L)
 	getaddressinfo->L = L;
 	getaddressinfo->on_getaddrinfo = on_getaddrinfo;
 
-	if ((ret = uv_getaddrinfo(loop, getaddressinfo, uv_on_resolve4, host, NULL, NULL)) < 0)
+	if ((ret = uv_getaddrinfo(loop, (uv_getaddrinfo_t*)getaddressinfo, uv_on_resolve4, host, NULL, NULL)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -511,7 +511,7 @@ static void uv_on_lookup(uv_getaddrinfo_t* uv_getaddressinfo, int status, struct
 {
 	int ret;
 	const char* err_str;
-	struct GetAddressInfo* getaddressinfo = uv_getaddressinfo;
+	struct GetAddressInfo* getaddressinfo = (struct GetAddressInfo*)uv_getaddressinfo;
 	lua_State* L = getaddressinfo->L;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, getaddressinfo->on_getaddrinfo);
 	if (status < 0)
@@ -528,7 +528,7 @@ static void uv_on_lookup(uv_getaddrinfo_t* uv_getaddressinfo, int status, struct
 	{
 		char ip[INET_ADDRSTRLEN];
 
-		if ((ret = uv_ip4_name(res->ai_addr, ip, INET_ADDRSTRLEN)) < 0)
+		if ((ret = uv_ip4_name((const struct sockaddr_in*)res->ai_addr, ip, INET_ADDRSTRLEN)) < 0)
 		{
 			err_str = uv_strerror(ret);
 			lua_pop(L, 1);
@@ -559,7 +559,7 @@ static int uv_lookup(lua_State* L)
 	getaddressinfo->L = L;
 	getaddressinfo->on_getaddrinfo = on_getaddrinfo;
 
-	if ((ret = uv_getaddrinfo(loop, getaddressinfo, uv_on_lookup, host, NULL, NULL)) < 0)
+	if ((ret = uv_getaddrinfo(loop, (uv_getaddrinfo_t*)getaddressinfo, uv_on_lookup, host, NULL, NULL)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -578,7 +578,7 @@ static int s_listen(lua_State *L)
 	lua_Integer port = luaL_checkinteger(L, 3);
 	luaL_checkany(L, 4);
 	int on_connection = luaL_ref(L, LUA_REGISTRYINDEX);
-	if ((ret = server_bind(server, ip, port, on_connection)) < 0)
+	if ((ret = server_bind(server, ip, (int)port, on_connection)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -696,7 +696,7 @@ static int so_getsockname(lua_State* L)
 	struct sockaddr_in sockaddr;
 	int len = sizeof(struct sockaddr_in);
 	
-	if ((ret = uv_tcp_getsockname(socket, &sockaddr, &len)) < 0)
+	if ((ret = uv_tcp_getsockname((const uv_tcp_t*)socket, (struct sockaddr*)&sockaddr, &len)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -726,7 +726,7 @@ static int so_getpeername(lua_State* L)
 	struct sockaddr_in sockaddr;
 	int len = sizeof(struct sockaddr_in);
 
-	if ((ret = uv_tcp_getpeername(socket, &sockaddr, &len)) < 0)
+	if ((ret = uv_tcp_getpeername((const uv_tcp_t*)socket, (struct sockaddr*)&sockaddr, &len)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
@@ -814,4 +814,3 @@ LUAMOD_API int luaopen_uv(lua_State *L) {
 	createmeta(L);
 	return 1;
 }
-
