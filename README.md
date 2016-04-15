@@ -1,12 +1,12 @@
-lua-libuv
-=====================
+# lua-libuv
+
 [![Build Status](https://travis-ci.org/zwh8800/lua-libuv.png?branch=master)](https://travis-ci.org/zwh8800/lua-libuv)
 
 使lua支持类似nodejs的异步编程，基于lua5.3.1和libuv
 
-目前在windows上开发和测试（Visual studio Community 2013），应该很方便能移植到Linux上，下一步会提供Linux上的Makefile（已支持Linux）
+---
 
-### 例子
+## 例子
 ```lua
 local server = uv.createServer()
 print(server)
