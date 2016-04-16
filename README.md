@@ -50,3 +50,7 @@ server:listen('0.0.0.0', 8080,
 
 uv.loop()
 ```
+
+## TODO
+
+- [ ] 把几个 api 的 lua_error 调用改为返回err的形式
