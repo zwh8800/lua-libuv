@@ -232,10 +232,9 @@ static void socket_on_read(uv_stream_t* uv_socket, ssize_t nread, const uv_buf_t
 		if (socket->has_on_data)
 		{
 			lua_rawgeti(L, LUA_REGISTRYINDEX, socket->on_data);
-			char* str = malloc((size_t)nread + 1);
+			char* str = malloc((size_t)nread);
 			memcpy(str, buf->base, nread);
-			str[nread] = '\0';
-			lua_pushstring(L, str);
+			lua_pushlstring(L, str, (size_t)nread);
 			lua_call(L, 1, 0);
 
 			free(str);
@@ -277,14 +276,14 @@ error:
 	free(write);
 }
 
-static int socket_write(struct Socket* socket, const char* data)
+static int socket_write(struct Socket* socket, const char* data, size_t len)
 {
 	int ret;
 	lua_State *L = socket->L;
 	struct Write* write = malloc(sizeof(struct Write));
 	memset(write, 0, sizeof(struct Write));
 	write->L = L;
-	write->buf = uv_buf_init((char*)data, (unsigned)strlen(data));
+	write->buf = uv_buf_init((char*)data, (unsigned)len);
 	
 	ret = uv_write((uv_write_t*)write, (uv_stream_t*)socket, &write->buf, 1, socket_on_write);
 	if (ret < 0)
@@ -652,8 +651,9 @@ static int so_write(lua_State *L)
 	int ret;
 	const char* err_str;
 	struct Socket* socket = luaL_checkudata(L, 1, UV_SOCKET_META);
-	const char* data = luaL_checkstring(L, 2);
-	if ((ret = socket_write(socket, data)) < 0)
+	size_t len;
+	const char* data = luaL_checklstring(L, 2, &len);
+	if ((ret = socket_write(socket, data, len)) < 0)
 	{
 		err_str = uv_strerror(ret);
 		lua_pushstring(L, err_str);
