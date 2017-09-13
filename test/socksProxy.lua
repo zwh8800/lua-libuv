@@ -195,7 +195,7 @@ function handleConnection(socket)
                 local request, err = parseRequestPayload(data)
                 if err ~= nil then
                     print('error:', err)
-                    if err == Errors.CommandTypeNotSupportd then
+                    if err == Errors.CommandTypeNotSupported then
                         reply.reply = ReplyType.CommandNotSupported
 
                         print('send: ', reply:toString():byte(1, -1))
@@ -212,7 +212,7 @@ function handleConnection(socket)
                 print_r(request)
 
                 if request.command ~= CommandType.Connect then
-                    reply.reply = ReplyType.CommandTypeNotSupportd
+                    reply.reply = ReplyType.CommandTypeNotSupported
 
                     print('send: ', reply:toString():byte(1, -1))
                     socket:write(reply:toString())
